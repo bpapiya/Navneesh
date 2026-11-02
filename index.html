@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f4e47">
+<title>Quill &amp; Color</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500&family=Great+Vibes&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Palette sampled from the artwork */
+    --teal-deep: #0b3b36;
+    --teal: #0f4e47;
+    --teal-soft: #1f7a6e;
+    --gold: #e9b23a;
+    --gold-soft: #f6d68a;
+    --saree: #d9562e;
+    --sky: #5cb2f0;
+    --floor: #d17a4c;
+
+    /* Artwork is 940 x 1672. It always fills the screen; on narrower screens the sides are cropped. */
+    --ar: 0.56220;
+    --stage-w: max(100vw, calc(100svh * var(--ar)));  /* cover the screen: crop the sides, never add space */
+    --stage-h: calc(var(--stage-w) / var(--ar));
+
+    /* Timeline (seconds) */
+    /* Scene times below start 0.8s before the cut from the gate, so 0.8s = the moment the scene appears. */
+    --t-woman: 1.3s;  /* characters slide in */
+    --t-man: 1.45s;
+    --t-logo: 2.3s;   /* logo grows in */
+    --t-exit: 3.7s;   /* characters leave */
+    --t-cover: 4.0s;  /* book cover swings open into page 2 */
+    --t-page2: 4.25s;
+    --t-man2: 5.2s;   /* seated man slides in from the left */
+    --t-man2-out: 6.6s;     /* he slides out, page turns (script: FLIP_AT 7.2s) */
+    --t-man2-back: 8.8s;    /* he slides back in */
+    --t-man2-out2: 10.2s;   /* he slides out again, page turns (FLIP2_AT 10.8s) */
+    --t-page3: 12.05s;      /* his book gives way to the seated couple's (same book, drawn separately) as that turn settles */
+    --t-couple: 12.4s;      /* page 3: the couple slides in from the left */
+    --t-couple-out: 13.9s;  /* they slide out, page turns (FLIP3_AT 14.5s) */
+    --t-couple-back: 16.1s; /* they slide back in */
+    --t-couple-out2: 17.6s; /* they slide out again, page turns (18.2s) */
+    --t-page4: 19.55s;      /* the standing couple's open book fades in as the last page turn settles */
+    --t-stand: 19.8s;       /* page 4: the standing couple slides in from the left */
+    --t-stand-out: 21.6s;   /* they slide out (no page turn on this screen) */
+    --t-stand-back: 22.2s;  /* the screen repeats: they slide back in */
+    --t-stand-out2: 24.0s;  /* and out again */
+    --t-close: 24.6s;       /* the book closes: the reverse of the opening, the cover swings back in around the spine */
+    --t-page5: 26.5s;        /* the closed book's scene fades in under them once they stand in place */
+    --t-man5: 25.8s;        /* she slides in from the left, he from the right; then the gate fades back in and it all repeats */
+    --t-woman5: 25.95s;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--teal-deep);
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .scene {
+    position: fixed; inset: 0;
+    display: grid; place-items: center; place-content: center;
+    background: linear-gradient(var(--sky) 50%, var(--floor) 50%);
+    overflow: hidden;
+  }
+  .backdrop { /* wide screens: blurred artwork behind the side bars */
+    position: absolute; inset: -40px;
+    background: center / cover no-repeat;
+    filter: blur(24px) brightness(.9);
+  }
+  .backdrop.b1 { background-image: url(assets/bg.webp); }
+  .backdrop.b2 { background-image: url(assets/bg3.webp); opacity: 0; }
+
+  .stage { position: relative; width: var(--stage-w); height: var(--stage-h); }
+  .page { position: absolute; inset: 0; }
+  .p2, .p2b { opacity: 0; }
+  .backdrop.b2b { background-image: url(assets/bg2c.webp); opacity: 0; }
+
+  img { display: block; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+  .fill { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* tall phones: mirror the sky upward and the floor downward so the scene fills the screen */
+  .ext { position: absolute; left: 0; width: 100%; height: 100%; transform: scaleY(-1); }
+  .ext.top { bottom: 100%; }
+  .ext.bot { top: 100%; }
+
+  /* Positions are each layer's box inside the 940x1672 artwork, in percent. */
+  .abs   { position: absolute; }
+  .pot   { left: 0%;      top: 85.467%; width: 13.191%; }
+  .bookbox { position: absolute; left: 15.213%; top: 13.577%; width: 70.745%; height: 75.718%; }
+  .woman { left: 1.596%;  top: 35.167%; width: 18.723%; }
+  .man   { left: 73.085%; top: 31.519%; width: 26.383%; }
+  .man2  { left: 2.234%;  top: 61.124%; width: 46.064%; }
+  .couple { left: 4.894%; top: 58.612%; width: 70.000%; }
+  .couple2 { left: 4.362%; top: 39.474%; width: 44.681%; }
+  .p4 { opacity: 0; }
+  .backdrop.b4 { background-image: url(assets/bg4.webp); opacity: 0; }
+  .man5   { left: 79.894%; top: 30.682%; width: 18.723%; }
+  .woman5 { left: 0%;      top: 37.081%; width: 24.255%; }
+  /* credit on the closed book's cover (cover box 241..796 x 205..1412 in the artwork) */
+  .credit { position: absolute; left: 25.638%; width: 59.043%; top: 40%; text-align: center;
+            color: #f1c75a; opacity: 0; pointer-events: none;
+            text-shadow: 0 1px 0 rgba(60,35,0,.55), 0 0 12px rgba(246,214,138,.35); }
+  .credit .by   { display: block; font: italic 500 calc(var(--stage-w) * .052) "Cormorant Garamond", Georgia, serif;
+                  letter-spacing: .06em; }
+  .credit .name { display: block; font: 400 calc(var(--stage-w) * .105) "Great Vibes", "Snell Roundhand", cursive;
+                  line-height: 1.15; margin-top: .1em; }
+  .p5, .p5cut { opacity: 0; }
+  .backdrop.b5 { background-image: url(assets/bg5.webp); opacity: 0; }
+  /* ---------- Book closing: the reverse of the opening ----------
+     The closed book's cover (box 241..796 x 205..1412 in the artwork) swings back in from the viewer's side
+     around its spine while the closed-book scene fades in underneath, as the open book did when the cover opened. */
+  .cover5 { position: absolute; left: 25.638%; top: 12.261%; width: 59.043%; height: 72.189%;
+            perspective: 700px; perspective-origin: 0% 50%; }
+  .cover5-inner { position: absolute; inset: 0; overflow: hidden; transform-origin: 0% 50%; opacity: 0;
+                  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+                  clip-path: polygon(0% .41%, 99.64% 5.22%, 99.64% 96.52%, 0% 99.67%); }
+  .cover5-inner img { position: absolute; left: -43.423%; top: -16.984%; width: 169.369%; max-width: none; }
+
+  /* The closed book is split at the hinge (15.34% across): the spine stays, the cover swings open. */
+  .bookbox img.book { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .spine img.book { clip-path: inset(0 84.4% 0 0); }
+  .cover { perspective: 700px; perspective-origin: 15.34% 50%; }
+  .cover-inner {
+    position: absolute; inset: 0;
+    transform-origin: 15.34% 50%;
+    transform-style: preserve-3d;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  }
+  .cover-inner img.book { clip-path: inset(0 0 0 15.34%); }
+  /* logo, relative to the book's box */
+  .logo { position: absolute; left: 24.812%; top: 26.461%; width: 59.098%; }
+  .logo-glint {
+    position: absolute; left: 24.812%; top: 26.461%; width: 59.098%; height: 30.332%;
+    -webkit-mask: url(assets/logo.webp) center / 100% 100% no-repeat;
+            mask: url(assets/logo.webp) center / 100% 100% no-repeat;
+    background: linear-gradient(115deg, transparent 35%, rgba(255,246,200,.85) 50%, transparent 65%);
+    background-size: 300% 100%; background-position: 100% 0;
+    opacity: 0;
+  }
+
+  /* ---------- Page turn on the open book ----------
+     The top right-hand page (box 395..862 x 465..1370 in the artwork) turns over around the spine
+     (x = 395) and settles on the left-hand page (85..398), then dissolves into it. Driven by script. */
+  .flip { position: absolute; left: 42.021%; top: 27.811%; width: 49.681%; height: 54.127%;
+          perspective: 1300px; perspective-origin: 0% 50%; pointer-events: none; visibility: hidden; }
+  .flip-shadow { /* shadow on the page underneath, just ahead of the lifting edge */
+    position: absolute; inset: 0; opacity: 0;
+    clip-path: polygon(.43% 9.94%, 7.49% 7.73%, 22.48% 6.08%, 54.6% 3.54%, 93.58% .55%, 99.57% 99.67%, .64% 99.45%);
+  }
+  .flip-shadow::before, .flip-shadow-l::before {
+    content: ""; position: absolute; top: 0; bottom: 0; width: 34%;
+    left: var(--edge, 100%);
+    background: linear-gradient(90deg, rgba(80,50,15,.45), rgba(80,50,15,.14) 40%, rgba(80,50,15,0));
+  }
+  .flip-shadow-l { /* shadow on the left-hand page as the sheet comes down onto it */
+    position: absolute; top: 0; height: 100%; right: 100%; width: 67.5%; opacity: 0; overflow: hidden;
+  }
+  .flip-shadow-l::before {
+    left: auto; right: var(--edge, 100%);
+    background: linear-gradient(270deg, rgba(80,50,15,.4), rgba(80,50,15,.12) 40%, rgba(80,50,15,0));
+  }
+  .leaf { position: absolute; inset: 0; transform-origin: 0% 50%; transform-style: preserve-3d; will-change: transform; }
+  .leaf .face { position: absolute; inset: 0; overflow: hidden;
+                backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+  .leaf .front { clip-path: polygon(.43% 9.94%, 7.49% 7.73%, 22.48% 6.08%, 54.6% 3.54%, 93.58% .55%, 99.57% 99.67%, .64% 99.45%); }
+  .leaf .front img { position: absolute; left: -84.582%; top: -51.381%; width: 201.285%; max-width: none; }
+  .leaf .back { /* the reverse of the page: plain paper, a little darker at the spine */
+    transform: rotateY(180deg);
+    clip-path: polygon(99.57% 9.94%, 92.51% 7.73%, 77.52% 6.08%, 45.4% 3.54%, 6.42% .55%, .43% 99.67%, 99.36% 99.45%);
+    background: linear-gradient(270deg, #ecc98a 0%, #f9e2b3 10%, #fdeac2 45%, #fbe6bb 100%);
+  }
+  .leaf .shade { position: absolute; inset: 0; opacity: 0; }
+  .leaf .front .shade { background: linear-gradient(90deg, rgba(70,45,15,.55), rgba(70,45,15,.25)); }
+  .leaf .back  .shade { background: linear-gradient(270deg, rgba(70,45,15,.45), rgba(70,45,15,.15)); }
+
+  /* ---------- Opening: walking through the gate towards the book ----------
+     The gate image zooms in around a fixed point chosen so that its (blurry) book, at x 286..650 / y 568..1155,
+     ends exactly where screen one's book stands (143..808 / 227..1493). A sharp copy of that book fades in over
+     the blurry one as it gets closer, then the scene cuts in. */
+  .gate { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; place-content: center; overflow: hidden;
+          background: #f2d3a4; }
+  .gate-bd { position: absolute; inset: -40px; background: url(assets/gate.webp) center / cover no-repeat;
+             filter: blur(22px) saturate(1.1); }
+  .gate-zoom { position: relative; width: var(--stage-w); height: var(--stage-h);
+               transform-origin: 48.989% 51.615%; transform: scale(var(--gk, 1)); will-change: transform; }
+  .gate-bob { position: absolute; inset: 0; }
+  .gate-zoom img { position: absolute; display: block; max-width: none; }
+  .gate-img { inset: 0; width: 100%; height: 100%; }
+  .gate-nobook { opacity: 0; }
+  .gate-book { position: absolute; left: 30.426%; top: 33.971%; width: 38.723%; height: 35.108%; opacity: 0; }
+  .gate-book img { inset: 0; width: 100%; height: 100%; }
+  .gating .gate-zoom { animation: walk 3.6s cubic-bezier(.42,0,.85,1) forwards; }
+  .gating .gate-bob  { animation: bob 3.6s linear forwards; }
+  .gating .gate-book { animation: focus 3.6s cubic-bezier(.42,0,.85,1) forwards; }
+  .gating .gate-nobook { animation: unblur 3.6s cubic-bezier(.42,0,.85,1) forwards; }
+  @keyframes unblur { 0%, 35% { opacity: 0; } 85%, 100% { opacity: 1; } }
+  .gate-done .gate { visibility: hidden; }
+  .closing .gate { opacity: 0; animation: fadeIn .7s ease forwards; }
+  @keyframes walk { from { transform: scale(var(--gk, 1)); } to { transform: scale(2); } }
+  @keyframes bob { /* gentle rise and fall of each step, settling at the end */
+    0%, 16%, 32%, 48%, 64%, 80%, 100% { transform: translateY(0); }
+    8%, 24%, 40%, 56%, 72% { transform: translateY(-.7%); }
+    88% { transform: translateY(-.3%); }
+  }
+  @keyframes focus { /* the book sharpens and takes on screen one's proportions as we approach */
+    0%   { opacity: 0; filter: blur(10px); transform: none; }
+    30%  { opacity: 0; }
+    90%  { opacity: 1; filter: blur(0); }
+    100% { opacity: 1; filter: none; transform: scale(.9135, 1.0784); }
+  }
+
+
+  /* Starting states */
+  .woman, .man, .man2, .couple, .couple2, .man5, .woman5, .logo { opacity: 0; }
+
+  /* ---------- Timeline (runs when .play is on <body>) ---------- */
+  .play .woman  { animation: fromLeft .8s cubic-bezier(.16,.84,.3,1) var(--t-woman) forwards,
+                             toLeft .55s cubic-bezier(.5,0,.8,.4) var(--t-exit) forwards; }
+  .play .man    { animation: fromRight .8s cubic-bezier(.16,.84,.3,1) var(--t-man) forwards,
+                             toRight .55s cubic-bezier(.5,0,.8,.4) var(--t-exit) forwards; }
+  .play .logo   { animation: logoIn .7s cubic-bezier(.22,.9,.3,1) var(--t-logo) forwards; }
+  .play .logo-glint { animation: glint .9s ease-in-out calc(var(--t-logo) + .6s) forwards; }
+  .play .cover-inner { animation: coverOpen 1.3s cubic-bezier(.45,0,.25,1) var(--t-cover) forwards; }
+  .play .p2,
+  .play .b2     { animation: fadeIn .7s ease var(--t-page2) forwards; }
+  .play .p2b,
+  .play .b2b    { animation: fadeIn .7s ease var(--t-page2) forwards, fadeOut .45s ease var(--t-page3) forwards; }
+  @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+  .play .man2   { animation: fromLeft .9s cubic-bezier(.16,.84,.3,1) var(--t-man2) forwards,
+                             toLeft .5s cubic-bezier(.5,0,.8,.4) var(--t-man2-out) forwards,
+                             fromLeft .9s cubic-bezier(.16,.84,.3,1) var(--t-man2-back) forwards,
+                             toLeft .5s cubic-bezier(.5,0,.8,.4) var(--t-man2-out2) forwards; }
+  .play .couple { animation: fromLeft 1s cubic-bezier(.16,.84,.3,1) var(--t-couple) forwards,
+                             toLeft .55s cubic-bezier(.5,0,.8,.4) var(--t-couple-out) forwards,
+                             fromLeft 1s cubic-bezier(.16,.84,.3,1) var(--t-couple-back) forwards,
+                             toLeft .55s cubic-bezier(.5,0,.8,.4) var(--t-couple-out2) forwards; }
+  .play .p4,
+  .play .b4     { animation: fadeIn .45s ease var(--t-page4) forwards; }
+  .play .couple2 { animation: fromLeft 1s cubic-bezier(.16,.84,.3,1) var(--t-stand) forwards,
+                              toLeft .55s cubic-bezier(.5,0,.8,.4) var(--t-stand-out) forwards,
+                              fromLeft 1s cubic-bezier(.16,.84,.3,1) var(--t-stand-back) forwards,
+                              toLeft .55s cubic-bezier(.5,0,.8,.4) var(--t-stand-out2) forwards; }
+  .play .cover5-inner { animation: coverClose 1.3s cubic-bezier(.45,0,.25,1) var(--t-close) forwards; }
+  .play .p5,
+  .play .b5     { animation: fadeIn .35s ease var(--t-page5) forwards; }
+  .play .p5cut  { animation: fadeIn .7s ease calc(var(--t-close) + .35s) forwards; }
+  .play .man5   { animation: fromRight .8s cubic-bezier(.16,.84,.3,1) var(--t-man5) forwards; }
+  .play .woman5 { animation: fromLeft .8s cubic-bezier(.16,.84,.3,1) var(--t-woman5) forwards; }
+  .play .credit { animation: creditIn 1.1s cubic-bezier(.2,.8,.2,1) 26.9s forwards; }
+  @keyframes creditIn { from { opacity: 0; transform: translateY(6%); } to { opacity: 1; transform: none; } }
+
+  @keyframes seamGlow { from { opacity: .3; } to { opacity: 1; } }
+  @keyframes openL { to { transform: translateX(-60vw); } }
+  @keyframes openR { to { transform: translateX(60vw); } }
+  @keyframes bookIn {
+    from { opacity: 0; transform: translateY(4%) scale(.96); }
+    35%  { opacity: 1; }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes fromLeft {
+    from { opacity: 0; transform: translateX(-115%); }
+    25%  { opacity: 1; }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes fromRight {
+    from { opacity: 0; transform: translateX(115%); }
+    25%  { opacity: 1; }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes toLeft  { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-115%); } }
+  @keyframes toRight { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(115%); } }
+  @keyframes logoIn { /* grows from its own centre with a soft gold halo */
+    0%   { opacity: 0; transform: scale(.5);  filter: drop-shadow(0 0 0 rgba(246,214,138,0)); }
+    45%  { opacity: 1; filter: drop-shadow(0 0 14px rgba(246,214,138,.8)); }
+    75%  { transform: scale(1.03); }
+    100% { opacity: 1; transform: none; filter: drop-shadow(0 0 0 rgba(246,214,138,0)); }
+  }
+  @keyframes glint {
+    0%   { opacity: 0; background-position: 100% 0; }
+    15%, 85% { opacity: 1; }
+    100% { opacity: 0; background-position: 0% 0; }
+  }
+  @keyframes coverOpen { /* swings toward the viewer around the spine, like turning a cover */
+    0%   { transform: rotateY(0deg); opacity: 1; }
+    70%  { opacity: 1; }
+    100% { transform: rotateY(-115deg); opacity: 0; }
+  }
+  @keyframes fadeIn { to { opacity: 1; } }
+  @keyframes coverClose { /* coverOpen played backwards */
+    0%   { transform: rotateY(-115deg); opacity: 0; }
+    30%  { opacity: 1; }
+    100% { transform: rotateY(0deg); opacity: 1; }
+  }
+  @keyframes closeL { from { transform: translateX(-60vw); } to { transform: none; } }
+  @keyframes closeR { from { transform: translateX(60vw); }  to { transform: none; } }
+
+  /* Reduced motion: show the final page straight away */
+  @media (prefers-reduced-motion: reduce) {
+    .gate, .p1, .cover, .woman, .man, .flip { display: none; }
+    .p2, .man2, .couple, .couple2, .cover5 { display: none; }
+    .p5, .b5, .man5, .woman5, .credit { opacity: 1 !important; animation: none !important; transform: none !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="scene" aria-label="A storybook opening: two figures beside a green and gold book, then a man sitting beside the open book">
+    <div class="backdrop b1" aria-hidden="true"></div>
+    <div class="backdrop b2" aria-hidden="true"></div>
+    <div class="backdrop b2b" aria-hidden="true"></div>
+    <div class="backdrop b4" aria-hidden="true"></div>
+    <div class="backdrop b5" aria-hidden="true"></div>
+    <div class="stage">
+      <!-- Page 1: background (sky, town, tree), pot, and the book's spine -->
+      <div class="page p1">
+        <img class="ext top" src="assets/bgext.webp" alt="">
+        <img class="fill" src="assets/bg.webp" alt="">
+        <img class="ext bot" src="assets/bgext.webp" alt="">
+        <img class="abs pot" src="assets/pot.webp" alt="">
+        <div class="bookbox spine"><img class="book" src="assets/book.webp" alt=""></div>
+      </div>
+
+      <!-- Page 2: the open book -->
+      <div class="page p2">
+        <img class="ext top" src="assets/bg3ext.webp" alt="">
+        <img class="fill" src="assets/bg3.webp" alt="">
+        <img class="ext bot" src="assets/bg3ext.webp" alt="">
+      </div>
+
+      <!-- The seated man's open book (bigger); gives way to page 2 after his second page turn -->
+      <div class="page p2b">
+        <img class="ext top" src="assets/bg2cext.webp" alt="">
+        <img class="fill" src="assets/bg2c.webp" alt="">
+        <img class="ext bot" src="assets/bg2cext.webp" alt="">
+      </div>
+
+      <!-- Page 4: the standing couple's open book -->
+      <div class="page p4">
+        <img class="ext top" src="assets/bg4ext.webp" alt="">
+        <img class="fill" src="assets/bg4.webp" alt="">
+        <img class="ext bot" src="assets/bg4ext.webp" alt="">
+      </div>
+
+      <!-- The book's front cover with the logo; it swings open into page 2 -->
+      <div class="bookbox cover">
+        <div class="cover-inner">
+          <img class="book" src="assets/book.webp" alt="">
+          <img class="logo" src="assets/logo.webp" alt="NP monogram in a gold laurel circle">
+          <div class="logo-glint" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <img class="abs woman" src="assets/woman.webp" alt="A woman in an orange saree holding a lotus">
+      <img class="abs man"   src="assets/man.webp"   alt="A man in a white dhoti and teal shawl">
+      <div class="flip" aria-hidden="true">
+        <div class="flip-shadow"></div>
+        <div class="flip-shadow-l"></div>
+        <div class="leaf">
+          <div class="face front"><img src="assets/bg3.webp" alt=""><div class="shade"></div></div>
+          <div class="face back"><div class="shade"></div></div>
+        </div>
+      </div>
+      <img class="abs man2"  src="assets/man2.webp"  alt="A man sitting against the open book, lost in thought">
+      <img class="abs couple" src="assets/couple.webp" alt="The couple sitting together against the open book, her head on his shoulder">
+      <img class="abs couple2" src="assets/couple2.webp" alt="The couple standing close beside the open book, holding hands and smiling at each other">
+
+      <!-- Page 5: the book closes; the couple stand on either side -->
+      <div class="page p5">
+        <img class="ext top" src="assets/bg5ext.webp" alt="">
+        <img class="fill" src="assets/bg5.webp" alt="">
+        <img class="ext bot" src="assets/bg5ext.webp" alt="">
+      </div>
+      <img class="fill p5cut" src="assets/bg5.webp" alt="">
+      <div class="cover5" aria-hidden="true"><div class="cover5-inner"><img src="assets/bg5.webp" alt=""></div></div>
+      <p class="credit"><span class="by">Created by</span><span class="name">Joy &amp; Paps</span></p>
+      <img class="abs man5"   src="assets/man5.webp"   alt="The man peeking around the closed book, smiling at her">
+      <img class="abs woman5" src="assets/woman5.webp" alt="The woman leaning on the closed book's spine, arms folded">
+
+    </div>
+    <div class="gate" aria-hidden="true">
+      <div class="gate-bd"></div>
+      <div class="gate-zoom">
+        <div class="gate-bob">
+          <img class="gate-img" src="assets/gate.webp" alt="">
+          <img class="gate-img gate-nobook" src="assets/gate-nobook.webp" alt="">
+          <div class="gate-book"><img src="assets/book.webp" alt=""></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+
+<script>
+(function () {
+  var body = document.body;
+  var FLIPS    = [[7200, 1], [10800, 1], [14500, 0], [18200, 0]]; // ms + book: two page turns each on the man's and the seated couple's screens
+  var FLIP_MS  = 1500;   // ms: length of the page turn
+  var CLOSE_AT = 30400;  // ms (scene time): the gate fades back in over the closed book
+  var LOOP_AT  = 31150;  // ms (scene time): gate shown, walk through it again
+  var GATE_MS  = 3600;   // ms: the walk through the gate
+  var LEAD_MS  = 800;    // ms: the scene starts this long before the cut, so its first moves land right after it
+  var timers = [];
+
+  /* ---- Page turn ----------------------------------------------------------
+     One sheet turns around the spine. Past the vertical it narrows to the width of the
+     left-hand page (315 of 467 px in the artwork), so it settles exactly onto it. */
+  var flip = document.querySelector('.flip');
+  var leaf = flip.querySelector('.leaf');
+  var frontShade = flip.querySelector('.front .shade');
+  var backShade = flip.querySelector('.back .shade');
+  var shadowR = flip.querySelector('.flip-shadow');
+  var shadowL = flip.querySelector('.flip-shadow-l');
+  var LEFT_W = 315 / 467;
+  /* The right-hand page of each open book: its box (% of the artwork), outline (% of the box),
+     where the artwork sits in that box, and how wide the left-hand page is relative to it. */
+  var BOOKS = [
+    { src: 'assets/bg3.webp', box: [34.574, 11.842, 55.426, 68.600], img: [-62.380, -17.263, 180.422], lw: 218 / 521,
+      poly: [[0,8.02],[2.88,7.24],[6.72,6.19],[14.4,4.97],[25.91,3.92],[37.43,3.31],[52.78,2.88],[68.14,2.35],[83.49,1.57],[95.01,.52],[97.89,.17],[100,0],[100,100],[0,99.5]] },
+    { src: 'assets/bg2c.webp', box: [34.574, 11.842, 55.426, 68.600], img: [-62.380, -17.263, 180.422], lw: 218 / 521,
+      poly: [[0,8.02],[2.88,7.24],[6.72,6.19],[14.4,4.97],[25.91,3.92],[37.43,3.31],[52.78,2.88],[68.14,2.35],[83.49,1.57],[95.01,.52],[97.89,.17],[100,0],[100,100],[0,99.5]] }
+  ];
+  var frontFace = flip.querySelector('.front'), backFace = flip.querySelector('.back');
+  var frontImg = frontFace.querySelector('img');
+  function polyCss(p, mirror) {
+    return 'polygon(' + p.map(function (q) { return (mirror ? 100 - q[0] : q[0]) + '% ' + q[1] + '%'; }).join(',') + ')';
+  }
+  function setBook(i) {
+    var g = BOOKS[i];
+    flip.style.left = g.box[0] + '%'; flip.style.top = g.box[1] + '%';
+    flip.style.width = g.box[2] + '%'; flip.style.height = g.box[3] + '%';
+    frontFace.style.clipPath = shadowR.style.clipPath = polyCss(g.poly, false);
+    backFace.style.clipPath = polyCss(g.poly, true);
+    if (frontImg.getAttribute('src') !== g.src) frontImg.src = g.src;
+    frontImg.style.left = g.img[0] + '%'; frontImg.style.top = g.img[1] + '%'; frontImg.style.width = g.img[2] + '%';
+    shadowL.style.width = (g.lw * 100) + '%';
+    LEFT_W = g.lw;
+  }
+  var raf = 0;
+
+  function ease(t) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function setFlip(t) { // t: 0..1
+    if (t <= 0) { flip.style.visibility = 'hidden'; flip.style.opacity = 1; return; }
+    flip.style.visibility = 'visible';
+    var e = ease(t);
+    var a = -180 * e;                                  // rotation around the spine
+    var rad = -a * Math.PI / 180;
+    var past = Math.max(0, (-a - 90) / 90);            // 0 at vertical, 1 when flat on the left
+    var sx = 1 - (1 - LEFT_W) * past;                  // narrow to the left page's width
+    var lift = Math.sin(Math.PI * e) * 2.5;            // a slight tilt, as if held by the corner
+    leaf.style.transform = 'rotateY(' + a.toFixed(2) + 'deg) rotateZ(' + (-lift * (1 - past)).toFixed(2) + 'deg) scaleX(' + sx.toFixed(4) + ')';
+    // light: the front darkens as it turns away, the back is shaded until it lies flat
+    frontShade.style.opacity = Math.min(1, Math.sin(Math.min(Math.PI / 2, rad)) * 1.1).toFixed(3);
+    backShade.style.opacity = (Math.sin(rad) * .35).toFixed(3);
+    // shadows: ahead of the edge on the right page while rising, on the left page while settling
+    var proj = Math.abs(Math.cos(rad));                // projected width of the sheet
+    shadowR.style.setProperty('--edge', (proj * 100).toFixed(2) + '%');
+    shadowR.style.opacity = (a > -90 ? Math.sin(rad) : 0).toFixed(3);
+    shadowL.style.setProperty('--edge', (proj * sx / LEFT_W * 100).toFixed(2) + '%');
+    shadowL.style.opacity = (a < -90 ? Math.sin(rad) * .9 : 0).toFixed(3);
+    // once it lies on the left page, dissolve into it (fade the container: fading the 3-D sheet itself would flatten it)
+    flip.style.opacity = t < .86 ? 1 : Math.max(0, 1 - (t - .86) / .14).toFixed(3);
+  }
+  function runFlip(book) {
+    cancelAnimationFrame(raf);
+    setBook(book);
+    var start = performance.now();
+    (function step(now) {
+      var t = Math.min(1, (now - start) / FLIP_MS);
+      setFlip(t);
+      if (t < 1) raf = requestAnimationFrame(step);
+      else setFlip(0);
+    })(start);
+  }
+
+  // the gate image starts out covering the whole screen, like the scene's backdrop
+  function fitGate() {
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var sw = Math.max(vw, vh * 0.5622), sh = sw / 0.5622;
+    document.documentElement.style.setProperty('--gk', Math.max(vw / sw, vh / sh).toFixed(4));
+  }
+  fitGate(); window.addEventListener('resize', fitGate);
+
+  function play() {
+    timers.forEach(clearTimeout); timers = [];
+    cancelAnimationFrame(raf); setFlip(0);
+    body.classList.remove('play', 'closing', 'gating', 'gate-done');
+    void body.offsetWidth; // restart CSS animations
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { body.classList.add('play'); return; }
+    body.classList.add('gating');
+    timers.push(setTimeout(startScene, GATE_MS - LEAD_MS));
+    timers.push(setTimeout(function () { body.classList.add('gate-done'); }, GATE_MS));   // immediate cut
+  }
+  function startScene() {
+    body.classList.add('play');
+    FLIPS.forEach(function (f) { timers.push(setTimeout(function () { runFlip(f[1]); }, f[0])); });
+    timers.push(setTimeout(function () {
+      body.classList.remove('gating', 'gate-done');
+      void body.offsetWidth;
+      body.classList.add('closing');
+    }, CLOSE_AT));
+    timers.push(setTimeout(play, LOOP_AT));
+  }
+
+  // Wait for every layer to decode so nothing pops in half-loaded
+  var imgs = Array.prototype.slice.call(document.querySelectorAll('.stage img, .gate img'));
+  Promise.all(imgs.map(function (img) {
+    return img.decode ? img.decode().catch(function () {}) :
+      new Promise(function (r) { img.complete ? r() : (img.onload = img.onerror = r); });
+  })).then(play);
+
+  // hook for checking the page turn frame by frame: __pageTurn(t) with t from 0 to 1
+  window.__setBook = setBook;
+  window.__pageTurn = function (t) {
+    timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf); setFlip(t);
+  };
+})();
+</script>
+</body>
+</html>
